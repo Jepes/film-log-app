@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Film Log - Registro Fotográfico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // Aplica el modo oscuro al cargar la página si está guardado en localStorage
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        .dark ::-webkit-scrollbar-track { background: #2d3748; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #4a5568; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        #loader { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; position: absolute; top: 50%; left: 50%; margin-left: -25px; margin-top: -25px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #drawing-canvas { touch-action: none; cursor: crosshair; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+    
+    <div id="loader"></div>
+
+    <div id="auth-screen" class="min-h-screen flex items-center justify-center fade-in hidden">
+        <div class="max-w-md w-full bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-bold text-center text-gray-900 dark:text-white mb-6">Bienvenido a Film Log</h2>
+            <div class="mb-4 border-b border-gray-200 dark:border-gray-700">
+                <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" id="auth-tabs">
+                    <li class="mr-2"><button class="inline-block p-4 border-b-2 rounded-t-lg" data-tab="login">Iniciar Sesión</button></li>
+                    <li><button class="inline-block p-4 border-b-2 rounded-t-lg" data-tab="register">Registrarse</button></li>
+                </ul>
+            </div>
+            <div id="login-form-container">
+                <form id="login-form">
+                    <div class="mb-4"><label for="login-email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label><input type="email" id="login-email" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" required></div>
+                    <div class="mb-6"><label for="login-password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Contraseña</label><input type="password" id="login-password" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" required></div>
+                    <button type="submit" class="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Iniciar Sesión</button>
+                </form>
+            </div>
+            <div id="register-form-container" class="hidden">
+                 <form id="register-form">
+                    <div class="mb-4"><label for="register-email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label><input type="email" id="register-email" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" required></div>
+                    <div class="mb-4"><label for="register-password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Contraseña (mín. 6 caracteres)</label><input type="password" id="register-password" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" required></div>
+                    <div class="mb-6"><label for="invite-code" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Código de Invitación</label><input type="text" id="invite-code" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" required></div>
+                    <button type="submit" class="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Crear Cuenta</button>
+                </form>
+            </div>
+            <p id="auth-error" class="text-red-500 text-sm mt-4 text-center"></p>
+            <div class="relative flex py-5 items-center"><div class="flex-grow border-t border-gray-300 dark:border-gray-600"></div><span class="flex-shrink mx-4 text-gray-500 dark:text-gray-400">O</span><div class="flex-grow border-t border-gray-300 dark:border-gray-600"></div></div>
+            <button id="google-signin-btn" class="w-full text-gray-700 dark:text-white bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-500 focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-500 font-medium rounded-lg text-sm px-5 py-2.5 text-center flex items-center justify-center"><svg class="w-4 h-4 mr-2" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 126 21.5 173.5 64.2L337.7 139.6C312.4 116.5 282.7 103 248 103c-73.2 0-133.1 60.2-133.1 134.3s59.9 134.3 133.1 134.3c76.1 0 124.2-54.4 128.6-109.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path></svg>Continuar con Google</button>
+        </div>
+    </div>
+
+    <div id="app" class="container mx-auto max-w-2xl p-4 hidden">
+        <div id="main-screen" class="fade-in">
+            <header class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Mis carretes</h1>
+                <div class="flex items-center space-x-2">
+                    <span id="user-email" class="text-sm text-gray-600 dark:text-gray-400 hidden md:block"></span>
+                    <button id="admin-panel-btn" class="bg-red-600 text-white px-4 py-2 rounded-lg shadow hover:bg-red-700 hidden">Admin</button>
+                    <button id="logout-btn" class="p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500" title="Cerrar sesión"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg></button>
+                    <button id="theme-toggle-btn" class="p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500"><svg id="theme-toggle-light-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg><svg id="theme-toggle-dark-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path></svg></button>
+                    <button id="manage-cameras-btn" class="bg-gray-700 text-white px-4 py-2 rounded-lg shadow hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50">Mis Cámaras</button>
+                    <button id="add-roll-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">+ Nuevo Carrete</button>
+                </div>
+            </header>
+            <div id="roll-list" class="space-y-4"></div>
+            <p id="no-rolls-message" class="text-center text-gray-500 dark:text-gray-400 mt-8 hidden">No tienes carretes. ¡Añade uno para empezar!</p>
+        </div>
+        <div id="roll-editor-screen" class="hidden fade-in">
+             <header class="flex items-center mb-6"><button id="back-to-main-btn" class="mr-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button><h2 id="roll-editor-title" class="text-2xl font-bold text-gray-900 dark:text-white"></h2></header>
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+                <h3 class="text-xl font-semibold mb-4 border-b pb-2 border-gray-200 dark:border-gray-700">Fotografía <span id="photo-number">1</span></h3>
+                <form id="photo-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="hidden" id="current-roll-id"><input type="hidden" id="current-photo-index">
+                    <div class="md:col-span-2"><label for="motivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Motivo</label><input type="text" id="motivo" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 transition-all"></div>
+                    <div><label for="apertura" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Apertura (f/)</label><select id="apertura" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></select></div>
+                    <div><label for="velocidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Velocidad (s)</label><select id="velocidad" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></select></div>
+                    <div><label for="compensacion" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Compensación (EV)</label><select id="compensacion" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></select></div>
+                    <div><label for="focal-length" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Distancia Focal (mm)</label><input type="number" id="focal-length" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2" placeholder="Ej: 50"></div>
+                    <div class="md:col-span-2"><label for="filtro" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Filtro</label><input type="text" id="filtro" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></div>
+                    <div class="md:col-span-2"><label for="anotaciones" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Anotaciones</label><textarea id="anotaciones" rows="3" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></textarea></div>
+                    <div class="md:col-span-2"><button type="button" id="open-drawing-btn" class="w-full text-sm text-blue-600 dark:text-blue-400 hover:underline">Añadir Dibujo</button><img id="drawing-thumbnail" class="hidden w-24 h-auto mt-2 border dark:border-gray-600 rounded-md"/></div>
+                    <div class="md:col-span-2 flex items-center space-x-3">
+                        <div class="flex-grow"><label for="fecha-foto" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha</label><input type="datetime-local" id="fecha-foto" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2" disabled></div>
+                        <div class="flex items-center pt-6"><input id="fecha-auto-check" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked><label for="fecha-auto-check" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">Auto</label></div>
+                    </div>
+                </form>
+                <div class="flex items-center justify-end mt-6 space-x-3">
+                    <button id="clear-photo-btn" class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Limpiar</button>
+                    <button id="save-photo-btn" class="bg-green-600 text-white px-6 py-2 rounded-lg shadow hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">Guardar Foto</button>
+                </div>
+            </div>
+        </div>
+        <div id="photo-list-screen" class="hidden fade-in">
+            <header class="flex items-center mb-6"><button id="back-to-main-from-list-btn" class="mr-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button><h2 id="photo-list-title" class="text-2xl font-bold text-gray-900 dark:text-white"></h2></header>
+            <div id="photo-list-container" class="space-y-3"></div>
+        </div>
+        <div id="new-roll-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-lg max-h-full overflow-y-auto">
+                <h3 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Nuevo Carrete</h3>
+                <form id="new-roll-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label for="marca" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Marca y Modelo</label><input type="text" id="marca" required class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></div>
+                        <div><label for="camara-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Cámara Usada</label><select id="camara-select" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></select><input type="text" id="camara-text" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 hidden" placeholder="Nombre de la cámara"></div>
+                        <div><label for="tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo</label><select id="tipo" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"><option>Color</option><option>Blanco y Negro</option></select></div>
+                        <div><label for="formato" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Formato</label><select id="formato" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"><option value="35mm">35mm</option><option value="120">120</option></select></div>
+                        <div><label for="iso-carrete" class="block text-sm font-medium text-gray-700 dark:text-gray-300">ISO del Carrete</label><input type="number" id="iso-carrete" required class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2" placeholder="Ej: 400"></div>
+                        <div><label for="iso-disparado" class="block text-sm font-medium text-gray-700 dark:text-gray-300">ISO Disparado</label><input type="number" id="iso-disparado" required class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2" placeholder="Ej: 400"></div>
+                        <div class="md:col-span-2"><label for="fecha-carga" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha de Carga</label><input type="date" id="fecha-carga" required class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"></div>
+                    </div>
+                    <div class="flex justify-end space-x-4 mt-8"><button type="button" id="cancel-roll-btn" class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Cancelar</button><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition-colors">Crear Carrete</button></div>
+                </form>
+            </div>
+        </div>
+        <div id="camera-manager-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-lg max-h-full overflow-y-auto">
+                <div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-gray-900 dark:text-white">Mis Cámaras</h3><button id="close-camera-manager-btn" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+                <form id="new-camera-form" class="mb-6 p-4 border dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                    <h4 class="font-semibold mb-2">Añadir Nueva Cámara</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2"><label for="camera-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label><input type="text" id="camera-name" required class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm p-2"></div>
+                        <div><label for="camera-type" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo</label><select id="camera-type" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm p-2"><option>Reflex</option><option>TLR</option><option>Rangefinder</option><option>Point and shoot</option><option>Otros</option></select></div>
+                        <div><label for="camera-format" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Formato</label><select id="camera-format" class="mt-1 block w-full border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm p-2"><option value="35mm">35mm</option><option value="120">120</option></select></div>
+                    </div>
+                    <button type="submit" class="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700">Añadir Cámara</button>
+                </form>
+                <div id="camera-list" class="space-y-2"></div>
+            </div>
+        </div>
+        <div id="drawing-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md">
+                <h3 class="text-xl font-bold mb-4 text-gray-900 dark:text-white">Añadir Dibujo</h3>
+                <canvas id="drawing-canvas" class="border border-gray-300 dark:border-gray-600 rounded-md w-full bg-white"></canvas>
+                <div class="flex justify-end space-x-3 mt-4">
+                    <button id="clear-drawing-btn" class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg">Limpiar</button>
+                    <button id="save-drawing-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg">Guardar Dibujo</button>
+                    <button id="close-drawing-btn" class="bg-red-500 text-white px-4 py-2 rounded-lg">Cerrar</button>
+                </div>
+            </div>
+        </div>
+        <div id="admin-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-lg max-h-full overflow-y-auto">
+                <div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-gray-900 dark:text-white">Panel de Administración</h3><button id="close-admin-modal-btn" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+                <button id="generate-invite-btn" class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 mb-6">Generar Nuevo Código de Invitación</button>
+                <h4 class="font-semibold mb-2">Códigos de Invitación</h4>
+                <div id="invites-list" class="space-y-2"></div>
+            </div>
+        </div>
+        <div id="google-invite-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-sm">
+                <h3 class="text-xl font-bold mb-4 text-gray-900 dark:text-white">Registro casi completo</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Para finalizar tu registro con Google, por favor, introduce un código de invitación válido.</p>
+                <form id="google-invite-form">
+                    <label for="google-invite-code" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Código de Invitación</label>
+                    <input type="text" id="google-invite-code" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600" required>
+                    <p id="google-invite-error" class="text-red-500 text-sm mt-2 text-center"></p>
+                    <button type="submit" class="w-full mt-4 text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Verificar y Continuar</button>
+                </form>
+                <button id="cancel-google-invite-btn" class="w-full mt-2 text-sm text-gray-500 hover:underline">Cancelar registro</button>
+            </div>
+        </div>
+        
+        <footer class="text-center mt-8 text-sm text-gray-500 dark:text-gray-400">
+            <p>Hecho por Jepes para la comunidad de Disparafilm</p>
+            <p class="mt-1">v1.0</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut, getAdditionalUserInfo, deleteUser } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyChUw7FdB-flATFZ8u7fb62g8MoM3Y5UYw",
+            authDomain: "film-log-bd2d8.firebaseapp.com",
+            projectId: "film-log-bd2d8",
+            storageBucket: "film-log-bd2d8.appspot.com",
+            messagingSenderId: "488707516803",
+            appId: "1:488707516803:web:3ec44fa631e637b8786eb6"
+        };
+        
+        const ADMIN_UID = "8LH9w1bUS0Op4QWFtoSUBmarnSF2";
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let userId = null;
+        let rolls = [];
+        let cameras = [];
+        let invites = [];
+        let unsubscribeRolls = null;
+        let unsubscribeCameras = null;
+        let unsubscribeInvites = null;
+        let tempDrawingData = null;
+        let pendingGoogleUser = null;
+
+        // --- CONSTANTES DEL DOM ---
+        const loader = document.getElementById('loader');
+        const appContainer = document.getElementById('app');
+        const authScreen = document.getElementById('auth-screen');
+        const mainScreen = document.getElementById('main-screen');
+        const rollEditorScreen = document.getElementById('roll-editor-screen');
+        const photoListScreen = document.getElementById('photo-list-screen');
+        const newRollModal = document.getElementById('new-roll-modal');
+        const cameraManagerModal = document.getElementById('camera-manager-modal');
+        const drawingModal = document.getElementById('drawing-modal');
+        const addRollBtn = document.getElementById('add-roll-btn');
+        const manageCamerasBtn = document.getElementById('manage-cameras-btn');
+        const closeCameraManagerBtn = document.getElementById('close-camera-manager-btn');
+        const cancelRollBtn = document.getElementById('cancel-roll-btn');
+        const newRollForm = document.getElementById('new-roll-form');
+        const newCameraForm = document.getElementById('new-camera-form');
+        const rollList = document.getElementById('roll-list');
+        const cameraList = document.getElementById('camera-list');
+        const noRollsMessage = document.getElementById('no-rolls-message');
+        const backToMainBtn = document.getElementById('back-to-main-btn');
+        const photoForm = document.getElementById('photo-form');
+        const savePhotoBtn = document.getElementById('save-photo-btn');
+        const clearPhotoBtn = document.getElementById('clear-photo-btn');
+        const rollEditorTitle = document.getElementById('roll-editor-title');
+        const photoNumberEl = document.getElementById('photo-number');
+        const currentRollIdInput = document.getElementById('current-roll-id');
+        const currentPhotoIndexInput = document.getElementById('current-photo-index');
+        const fechaAutoCheck = document.getElementById('fecha-auto-check');
+        const fechaFotoInput = document.getElementById('fecha-foto');
+        const backToMainFromListBtn = document.getElementById('back-to-main-from-list-btn');
+        const photoListContainer = document.getElementById('photo-list-container');
+        const photoListTitle = document.getElementById('photo-list-title');
+        const themeToggleBtn = document.getElementById('theme-toggle-btn');
+        const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+        const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const googleSigninBtn = document.getElementById('google-signin-btn');
+        const authError = document.getElementById('auth-error');
+        const authTabs = document.getElementById('auth-tabs');
+        const loginFormContainer = document.getElementById('login-form-container');
+        const registerFormContainer = document.getElementById('register-form-container');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userEmailSpan = document.getElementById('user-email');
+        const openDrawingBtn = document.getElementById('open-drawing-btn');
+        const closeDrawingBtn = document.getElementById('close-drawing-btn');
+        const saveDrawingBtn = document.getElementById('save-drawing-btn');
+        const clearDrawingBtn = document.getElementById('clear-drawing-btn');
+        const drawingCanvas = document.getElementById('drawing-canvas');
+        const drawingThumbnail = document.getElementById('drawing-thumbnail');
+        const adminPanelBtn = document.getElementById('admin-panel-btn');
+        const adminModal = document.getElementById('admin-modal');
+        const closeAdminModalBtn = document.getElementById('close-admin-modal-btn');
+        const generateInviteBtn = document.getElementById('generate-invite-btn');
+        const invitesList = document.getElementById('invites-list');
+        const inviteCodeInput = document.getElementById('invite-code');
+        const googleInviteModal = document.getElementById('google-invite-modal');
+        const googleInviteForm = document.getElementById('google-invite-form');
+        const cancelGoogleInviteBtn = document.getElementById('cancel-google-invite-btn');
+
+        const apertures = [1.2, 1.4, 1.8, 2, 2.8, 3.5, 4, 4.5, 5.6, 6.3, 8, 9, 11, 13, 16, 18, 22, 27, 32];
+        const speeds = ['30', '15', '8', '4', '2', '1', '1/2', '1/4', '1/8', '1/15', '1/30', '1/60', '1/125', '1/250', '1/500', '1/1000', '1/2000', '1/4000'];
+        const compensations = [-3, -2.5, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3];
+
+        // --- DEFINICIÓN DE TODAS LAS FUNCIONES ---
+        const setupRealtimeListeners = () => {
+            if (unsubscribeRolls) unsubscribeRolls();
+            if (unsubscribeCameras) unsubscribeCameras();
+            const rollsQuery = query(collection(db, `users/${userId}/rolls`));
+            unsubscribeRolls = onSnapshot(rollsQuery, (querySnapshot) => {
+                rolls = [];
+                querySnapshot.forEach((doc) => {
+                    rolls.push({ id: doc.id, ...doc.data() });
+                });
+                renderRollList();
+            });
+            const camerasQuery = query(collection(db, `users/${userId}/cameras`));
+            unsubscribeCameras = onSnapshot(camerasQuery, (querySnapshot) => {
+                cameras = [];
+                querySnapshot.forEach((doc) => {
+                    cameras.push({ id: doc.id, ...doc.data() });
+                });
+                renderCameraList();
+            });
+        };
+
+        const renderRollList = () => {
+            rollList.innerHTML = '';
+            noRollsMessage.classList.toggle('hidden', rolls.length > 0);
+            rolls.forEach(roll => {
+                const rollCard = document.createElement('div');
+                rollCard.className = 'bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0';
+                const photosTaken = roll.photos.filter(p => p.motivo).length;
+                rollCard.innerHTML = `
+                    <div class="flex-grow pr-4">
+                        <h3 class="text-xl font-bold text-gray-800 dark:text-white">${roll.marca}</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">${roll.camara} | ISO ${roll.isoDisparado} | ${roll.formato}</p>
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mt-2">
+                            <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${ (photosTaken / (roll.formato === '120' ? 12 : 36)) * 100}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${photosTaken} fotos tomadas</p>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-shrink-0">
+                        <button data-roll-id="${roll.id}" class="view-photos-btn bg-teal-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-teal-600 transition-colors">Ver Fotos</button>
+                        <button data-roll-id="${roll.id}" class="export-btn bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg text-sm hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Exportar</button>
+                        <button data-roll-id="${roll.id}" class="delete-roll-btn text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                        <button data-roll-id="${roll.id}" class="open-roll-btn bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition-colors">Abrir</button>
+                    </div>
+                `;
+                rollList.appendChild(rollCard);
+            });
+        };
+
+        const renderCameraList = () => {
+            cameraList.innerHTML = '';
+            if (cameras.length === 0) {
+                cameraList.innerHTML = `<p class="text-center text-gray-500 dark:text-gray-400">No tienes cámaras guardadas.</p>`;
+            } else {
+                cameras.forEach(camera => {
+                    const cameraItem = document.createElement('div');
+                    cameraItem.className = 'flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg';
+                    cameraItem.innerHTML = `
+                        <div>
+                            <p class="font-semibold">${camera.name}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">${camera.type} - ${camera.format}</p>
+                        </div>
+                        <button data-camera-id="${camera.id}" class="delete-camera-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                    `;
+                    cameraList.appendChild(cameraItem);
+                });
+            }
+        };
+
+        const populateSelectors = () => {
+            apertura.innerHTML = '';
+            velocidad.innerHTML = '';
+            compensacion.innerHTML = '';
+            apertures.forEach(a => apertura.innerHTML += `<option value="${a}">${a}</option>`);
+            speeds.forEach(s => velocidad.innerHTML += `<option value="${s}">${s}</option>`);
+            compensations.forEach(c => compensacion.innerHTML += `<option value="${c}">${c >= 0 ? '+' : ''}${c}</option>`);
+        };
+
+        const showScreen = (screenToShow) => {
+            mainScreen.classList.toggle('hidden', screenToShow !== 'main');
+            rollEditorScreen.classList.toggle('hidden', screenToShow !== 'editor');
+            photoListScreen.classList.toggle('hidden', screenToShow !== 'photo-list');
+        };
+
+        const loadPhotoData = (rollId, photoIndex) => {
+            const roll = rolls.find(r => r.id === rollId);
+            if (!roll) return;
+            const photo = roll.photos[photoIndex] || {};
+            photoNumberEl.textContent = photoIndex + 1;
+            currentRollIdInput.value = rollId;
+            currentPhotoIndexInput.value = photoIndex;
+            tempDrawingData = photo.dibujo || null;
+            motivo.value = photo.motivo || '';
+            apertura.value = photo.apertura || apertures[5];
+            velocidad.value = photo.velocidad || speeds[10];
+            compensacion.value = photo.compensacion || 0;
+            document.getElementById('focal-length').value = photo.focalLength || '';
+            filtro.value = photo.filtro || '';
+            document.getElementById('anotaciones').value = photo.anotaciones || '';
+            if (tempDrawingData) {
+                drawingThumbnail.src = tempDrawingData;
+                drawingThumbnail.classList.remove('hidden');
+            } else {
+                drawingThumbnail.classList.add('hidden');
+            }
+            if (photo.fecha) {
+                fechaFotoInput.value = photo.fecha.slice(0, 16);
+                fechaAutoCheck.checked = false;
+                fechaFotoInput.disabled = false;
+                fechaFotoInput.classList.remove('bg-gray-100');
+            } else {
+                fechaFotoInput.value = '';
+                fechaAutoCheck.checked = true;
+                fechaFotoInput.disabled = true;
+                fechaFotoInput.classList.add('bg-gray-100');
+            }
+        };
+
+        const renderPhotoList = (rollId) => {
+            const roll = rolls.find(r => r.id === rollId);
+            if (!roll) return;
+            photoListTitle.textContent = `Fotos de: ${roll.marca}`;
+            photoListContainer.innerHTML = '';
+            const takenPhotos = roll.photos.filter(p => p.motivo);
+            if (takenPhotos.length === 0) {
+                photoListContainer.innerHTML = `<p class="text-center text-gray-500 dark:text-gray-400 mt-8">Aún no has registrado ninguna fotografía para este carrete.</p>`;
+            } else {
+                roll.photos.forEach((photo, index) => {
+                    if (photo.motivo) {
+                        const photoCard = document.createElement('div');
+                        photoCard.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 shadow-sm';
+                        let drawingHTML = '';
+                        if (photo.dibujo) {
+                            drawingHTML = `<div class="mt-2"><p class="text-sm font-semibold">Dibujo:</p><img src="${photo.dibujo}" class="border dark:border-gray-600 rounded-md mt-1 w-full max-w-xs mx-auto"/></div>`;
+                        }
+                        let notesHTML = '';
+                        if (photo.anotaciones) {
+                            notesHTML = `<div class="mt-2"><p class="text-sm font-semibold">Anotaciones:</p><p class="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">${photo.anotaciones}</p></div>`;
+                        }
+                        photoCard.innerHTML = `
+                            <h4 class="font-bold text-lg text-gray-800 dark:text-white">Fotografía ${index + 1}</h4>
+                            <p class="font-semibold">${photo.motivo}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-300">
+                                f/${photo.apertura} | ${photo.velocidad}s | ${photo.compensacion >= 0 ? '+' : ''}${photo.compensacion} EV ${photo.focalLength ? `| ${photo.focalLength}mm` : ''}
+                            </p>
+                            ${photo.filtro ? `<p class="text-sm text-gray-600 dark:text-gray-300">Filtro: ${photo.filtro}</p>` : ''}
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Fecha: ${new Date(photo.fecha).toLocaleString('es-ES')}</p>
+                            ${notesHTML}
+                            ${drawingHTML}
+                        `;
+                        photoListContainer.appendChild(photoCard);
+                    }
+                });
+            }
+            showScreen('photo-list');
+        };
+
+        const handleNewRoll = async (e) => {
+            e.preventDefault();
+            const camaraSelect = document.getElementById('camara-select');
+            const camaraText = document.getElementById('camara-text');
+            const camara = camaraSelect.value === 'other' ? camaraText.value : camaraSelect.options[camaraSelect.selectedIndex].text;
+            if (!camara) {
+                camaraSelect.classList.add('border-red-500');
+                setTimeout(() => camaraSelect.classList.remove('border-red-500'), 2500);
+                return;
+            }
+            const newRoll = {
+                marca: document.getElementById('marca').value,
+                camara: camara,
+                tipo: document.getElementById('tipo').value,
+                formato: document.getElementById('formato').value,
+                isoCarrete: document.getElementById('iso-carrete').value,
+                isoDisparado: document.getElementById('iso-disparado').value,
+                fechaCarga: document.getElementById('fecha-carga').value,
+                photos: Array.from({ length: document.getElementById('formato').value === '120' ? 12 : 36 }, () => ({}))
+            };
+            try {
+                await addDoc(collection(db, `users/${userId}/rolls`), newRoll);
+                newRollModal.classList.add('hidden');
+                newRollForm.reset();
+            } catch (error) {
+                console.error("Error al añadir carrete: ", error);
+            }
+        };
+
+        const openRollEditor = (rollId) => {
+            const roll = rolls.find(r => r.id === rollId);
+            if (roll) {
+                rollEditorTitle.textContent = `${roll.marca} (${roll.camara})`;
+                const firstEmptyPhotoIndex = roll.photos.findIndex(p => !p.motivo);
+                loadPhotoData(rollId, firstEmptyPhotoIndex !== -1 ? firstEmptyPhotoIndex : 0);
+                showScreen('editor');
+                motivo.focus();
+            }
+        };
+
+        const handleSavePhoto = async () => {
+            const rollId = currentRollIdInput.value;
+            const photoIndex = parseInt(currentPhotoIndexInput.value, 10);
+            const roll = rolls.find(r => r.id === rollId);
+            if (roll) {
+                const motivoInput = document.getElementById('motivo');
+                if (!motivoInput.value) {
+                    motivoInput.classList.add('border-red-500');
+                    motivoInput.placeholder = 'El motivo es obligatorio';
+                    motivoInput.focus();
+                    setTimeout(() => {
+                        motivoInput.classList.remove('border-red-500');
+                        motivoInput.placeholder = '';
+                    }, 2500);
+                    return;
+                }
+                const photoData = {
+                    motivo: motivoInput.value,
+                    apertura: document.getElementById('apertura').value,
+                    velocidad: document.getElementById('velocidad').value,
+                    compensacion: document.getElementById('compensacion').value,
+                    focalLength: document.getElementById('focal-length').value,
+                    filtro: document.getElementById('filtro').value,
+                    anotaciones: document.getElementById('anotaciones').value,
+                    dibujo: tempDrawingData,
+                    fecha: fechaAutoCheck.checked ? new Date().toISOString().slice(0, 16) : fechaFotoInput.value,
+                };
+                const updatedPhotos = [...roll.photos];
+                updatedPhotos[photoIndex] = photoData;
+                try {
+                    const rollRef = doc(db, `users/${userId}/rolls`, rollId);
+                    await updateDoc(rollRef, { photos: updatedPhotos });
+                    const nextPhotoIndex = photoIndex + 1;
+                    if (nextPhotoIndex < roll.photos.length) {
+                        motivoInput.value = '';
+                        motivoInput.placeholder = '';
+                        document.getElementById('anotaciones').value = '';
+                        tempDrawingData = null;
+                        drawingThumbnail.classList.add('hidden');
+                        fechaAutoCheck.checked = true;
+                        fechaFotoInput.disabled = true;
+                        fechaFotoInput.value = '';
+                        fechaFotoInput.classList.add('bg-gray-100');
+                        currentPhotoIndexInput.value = nextPhotoIndex;
+                        photoNumberEl.textContent = nextPhotoIndex + 1;
+                        motivoInput.focus();
+                    } else {
+                        showScreen('main');
+                    }
+                } catch (error) {
+                    console.error("Error al guardar la foto: ", error);
+                }
+            }
+        };
+
+        const handleClearPhoto = () => {
+            photoForm.reset();
+            tempDrawingData = null;
+            drawingThumbnail.classList.add('hidden');
+            fechaAutoCheck.checked = true;
+            fechaFotoInput.disabled = true;
+            fechaFotoInput.value = '';
+            fechaFotoInput.classList.add('bg-gray-100');
+        };
+
+        const handleDeleteRoll = async (rollId) => {
+            try {
+                await deleteDoc(doc(db, `users/${userId}/rolls`, rollId));
+            } catch (error) {
+                console.error("Error al eliminar carrete: ", error);
+            }
+        };
+
+        const handleExportRoll = (rollId) => {
+            const roll = rolls.find(r => r.id === rollId);
+            if (!roll) return;
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += `Carrete:,"${roll.marca}"\r\n`;
+            csvContent += `Cámara:,"${roll.camara}"\r\n`;
+            csvContent += `Tipo:,"${roll.tipo}",Formato:,"${roll.formato}"\r\n`;
+            csvContent += `ISO Carrete:,"${roll.isoCarrete}",ISO Disparado:,"${roll.isoDisparado}"\r\n`;
+            csvContent += `Fecha de Carga:,"${roll.fechaCarga}"\r\n\r\n`;
+            const headers = ["Numero Foto", "Motivo", "Apertura", "Velocidad", "Compensacion", "Distancia Focal", "Filtro", "Anotaciones", "Fecha"];
+            csvContent += headers.join(",") + "\r\n";
+            roll.photos.forEach((photo, index) => {
+                if (photo.motivo) {
+                    const row = [
+                        index + 1,
+                        `"${(photo.motivo || '').replace(/"/g, '""')}"`,
+                        photo.apertura || '',
+                        photo.velocidad || '',
+                        photo.compensacion || '',
+                        photo.focalLength || '',
+                        `"${(photo.filtro || '').replace(/"/g, '""')}"`,
+                        `"${(photo.anotaciones || '').replace(/"/g, '""')}"`,
+                        `"${photo.fecha || ''}"`
+                    ];
+                    csvContent += row.join(",") + "\r\n";
+                }
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `carrete_${roll.marca.replace(/\s+/g, '_')}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const handleNewCamera = async (e) => {
+            e.preventDefault();
+            const newCamera = {
+                name: document.getElementById('camera-name').value,
+                type: document.getElementById('camera-type').value,
+                format: document.getElementById('camera-format').value,
+            };
+            try {
+                await addDoc(collection(db, `users/${userId}/cameras`), newCamera);
+                newCameraForm.reset();
+            } catch (error) {
+                console.error("Error al añadir cámara: ", error);
+            }
+        };
+
+        const handleDeleteCamera = async (cameraId) => {
+            try {
+                await deleteDoc(doc(db, `users/${userId}/cameras`, cameraId));
+            } catch (error) {
+                console.error("Error al eliminar cámara: ", error);
+            }
+        };
+
+        const populateCameraSelector = () => {
+            const camaraSelect = document.getElementById('camara-select');
+            camaraSelect.innerHTML = '<option value="" disabled selected>Selecciona una cámara</option>';
+            cameras.forEach(camera => {
+                camaraSelect.innerHTML += `<option value="${camera.id}">${camera.name}</option>`;
+            });
+            camaraSelect.innerHTML += '<option value="other">Otra (especificar)...</option>';
+        };
+
+        const updateThemeIcons = () => {
+            if (document.documentElement.classList.contains('dark')) {
+                themeToggleLightIcon.classList.remove('hidden');
+                themeToggleDarkIcon.classList.add('hidden');
+            } else {
+                themeToggleLightIcon.classList.add('hidden');
+                themeToggleDarkIcon.classList.remove('hidden');
+            }
+        };
+
+        const setupAdminListeners = () => {
+            const invitesQuery = query(collection(db, "invitations"));
+            unsubscribeInvites = onSnapshot(invitesQuery, (snapshot) => {
+                invites = [];
+                snapshot.forEach(doc => invites.push({ id: doc.id, ...doc.data() }));
+                renderInvitesList();
+            });
+        };
+
+        const renderInvitesList = () => {
+            invitesList.innerHTML = '';
+            if (invites.length === 0) {
+                invitesList.innerHTML = `<p class="text-center text-gray-500 dark:text-gray-400">No hay códigos generados.</p>`;
+            } else {
+                invites.forEach(invite => {
+                    const inviteItem = document.createElement('div');
+                    const usedClass = invite.isUsed ? 'bg-green-200 dark:bg-green-900' : 'bg-gray-100 dark:bg-gray-700';
+                    const usedText = invite.isUsed ? 'Utilizado' : 'Disponible';
+                    inviteItem.className = `flex justify-between items-center p-3 ${usedClass} rounded-lg`;
+                    inviteItem.innerHTML = `
+                        <div>
+                            <p class="font-mono font-semibold">${invite.code}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">${usedText}</p>
+                        </div>
+                        <button data-invite-id="${invite.id}" class="delete-invite-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    `;
+                    invitesList.appendChild(inviteItem);
+                });
+            }
+        };
+
+        const handleGoogleSignIn = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                const info = getAdditionalUserInfo(result);
+                if (info.isNewUser) {
+                    pendingGoogleUser = result.user;
+                    googleInviteModal.classList.remove('hidden');
+                }
+            } catch (error) {
+                authError.textContent = 'Error al iniciar sesión con Google.';
+                console.error(error);
+            }
+        };
+
+        const handleGoogleInviteVerification = async (e) => {
+            e.preventDefault();
+            const code = document.getElementById('google-invite-code').value.trim();
+            const errorEl = document.getElementById('google-invite-error');
+            errorEl.textContent = '';
+            
+            try {
+                const invitesRef = collection(db, "invitations");
+                const q = query(invitesRef, where("code", "==", code));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty || querySnapshot.docs[0].data().isUsed) {
+                    errorEl.textContent = 'Código no válido o ya utilizado.';
+                } else {
+                    const inviteDoc = querySnapshot.docs[0];
+                    await updateDoc(doc(db, "invitations", inviteDoc.id), {
+                        isUsed: true,
+                        usedBy: pendingGoogleUser.uid,
+                        usedAt: serverTimestamp()
+                    });
+                    googleInviteModal.classList.add('hidden');
+                    pendingGoogleUser = null;
+                }
+            } catch (error) {
+                 errorEl.textContent = 'Error al verificar el código.';
+            }
+        };
+
+        const handleCancelGoogleInvite = async () => {
+            if (pendingGoogleUser) {
+                try {
+                    await deleteUser(pendingGoogleUser);
+                } catch (error) {
+                    console.error("Error al eliminar usuario pendiente:", error);
+                }
+                pendingGoogleUser = null;
+            }
+            googleInviteModal.classList.add('hidden');
+        };
+
+        // --- ASIGNACIÓN DE EVENT LISTENERS ---
+        authTabs.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                const tab = e.target.dataset.tab;
+                document.querySelectorAll('#auth-tabs button').forEach(button => {
+                    button.classList.remove('border-blue-500', 'text-blue-600', 'dark:text-blue-500', 'dark:border-blue-500');
+                    button.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300', 'dark:hover:text-gray-300');
+                });
+                e.target.classList.add('border-blue-500', 'text-blue-600', 'dark:text-blue-500', 'dark:border-blue-500');
+                loginFormContainer.classList.toggle('hidden', tab !== 'login');
+                registerFormContainer.classList.toggle('hidden', tab !== 'register');
+                authError.textContent = '';
+            }
+        });
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const inviteCode = inviteCodeInput.value.trim();
+            authError.textContent = '';
+            if (!inviteCode) {
+                authError.textContent = 'Se requiere un código de invitación.';
+                return;
+            }
+            try {
+                const invitesRef = collection(db, "invitations");
+                const q = query(invitesRef, where("code", "==", inviteCode));
+                const querySnapshot = await getDocs(q);
+                if (querySnapshot.empty) {
+                    authError.textContent = 'El código de invitación no es válido.';
+                    return;
+                }
+                const inviteDoc = querySnapshot.docs[0];
+                if (inviteDoc.data().isUsed) {
+                    authError.textContent = 'Este código de invitación ya ha sido utilizado.';
+                    return;
+                }
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                await updateDoc(doc(db, "invitations", inviteDoc.id), {
+                    isUsed: true,
+                    usedBy: userCredential.user.uid,
+                    usedAt: serverTimestamp()
+                });
+            } catch (error) {
+                authError.textContent = 'Error: ' + error.message;
+            }
+        });
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            authError.textContent = '';
+            signInWithEmailAndPassword(auth, email, password).catch(error => {
+                authError.textContent = 'Email o contraseña incorrectos.';
+            });
+        });
+        googleSigninBtn.addEventListener('click', handleGoogleSignIn);
+        googleInviteForm.addEventListener('submit', handleGoogleInviteVerification);
+        cancelGoogleInviteBtn.addEventListener('click', handleCancelGoogleInvite);
+        logoutBtn.addEventListener('click', () => {
+            signOut(auth);
+        });
+        generateInviteBtn.addEventListener('click', async () => {
+            const code = 'INV-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            try {
+                await addDoc(collection(db, "invitations"), {
+                    code: code,
+                    isUsed: false,
+                    createdAt: serverTimestamp(),
+                    usedBy: null,
+                    usedAt: null
+                });
+            } catch (error) {
+                console.error("Error al crear invitación: ", error);
+            }
+        });
+        invitesList.addEventListener('click', async (e) => {
+            const deleteBtn = e.target.closest('.delete-invite-btn');
+            if (deleteBtn) {
+                try {
+                    await deleteDoc(doc(db, "invitations", deleteBtn.dataset.inviteId));
+                } catch (error) {
+                    console.error("Error al eliminar invitación: ", error);
+                }
+            }
+        });
+        adminPanelBtn.addEventListener('click', () => adminModal.classList.remove('hidden'));
+        closeAdminModalBtn.addEventListener('click', () => adminModal.classList.add('hidden'));
+        addRollBtn.addEventListener('click', () => {
+            document.getElementById('fecha-carga').value = new Date().toISOString().split('T')[0];
+            populateCameraSelector();
+            document.getElementById('camara-text').classList.add('hidden');
+            document.getElementById('formato').disabled = false;
+            newRollModal.classList.remove('hidden');
+        });
+        cancelRollBtn.addEventListener('click', () => newRollModal.classList.add('hidden'));
+        newRollForm.addEventListener('submit', handleNewRoll);
+        manageCamerasBtn.addEventListener('click', () => {
+            renderCameraList();
+            cameraManagerModal.classList.remove('hidden');
+        });
+        closeCameraManagerBtn.addEventListener('click', () => cameraManagerModal.classList.add('hidden'));
+        newCameraForm.addEventListener('submit', handleNewCamera);
+        cameraList.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-camera-btn');
+            if (deleteBtn) handleDeleteCamera(deleteBtn.dataset.cameraId);
+        });
+        document.getElementById('camara-select').addEventListener('change', (e) => {
+            const camaraText = document.getElementById('camara-text');
+            const formatoSelect = document.getElementById('formato');
+            if (e.target.value === 'other') {
+                camaraText.classList.remove('hidden');
+                camaraText.value = '';
+                formatoSelect.disabled = false;
+            } else {
+                camaraText.classList.add('hidden');
+                const selectedCamera = cameras.find(c => c.id === e.target.value);
+                if (selectedCamera) {
+                    formatoSelect.value = selectedCamera.format;
+                    formatoSelect.disabled = true;
+                }
+            }
+        });
+        backToMainBtn.addEventListener('click', () => {
+            showScreen('main');
+        });
+        backToMainFromListBtn.addEventListener('click', () => showScreen('main'));
+        savePhotoBtn.addEventListener('click', handleSavePhoto);
+        clearPhotoBtn.addEventListener('click', handleClearPhoto);
+        fechaAutoCheck.addEventListener('change', (e) => {
+            fechaFotoInput.disabled = e.target.checked;
+            fechaFotoInput.classList.toggle('bg-gray-100', e.target.checked);
+            fechaFotoInput.classList.toggle('dark:bg-gray-700', !e.target.checked);
+            if (e.target.checked) fechaFotoInput.value = '';
+        });
+        rollList.addEventListener('click', (e) => {
+            const openBtn = e.target.closest('.open-roll-btn');
+            const deleteBtn = e.target.closest('.delete-roll-btn');
+            const exportBtn = e.target.closest('.export-btn');
+            const viewBtn = e.target.closest('.view-photos-btn');
+            if (openBtn) openRollEditor(openBtn.dataset.rollId);
+            if (deleteBtn) handleDeleteRoll(deleteBtn.dataset.rollId);
+            if (exportBtn) handleExportRoll(exportBtn.dataset.rollId);
+            if (viewBtn) renderPhotoList(viewBtn.dataset.rollId);
+        });
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('color-theme', isDark ? 'dark' : 'light');
+            updateThemeIcons();
+        });
+
+        const ctx = drawingCanvas.getContext('2d');
+        let drawing = false;
+        function resizeCanvas() {
+            const rect = drawingCanvas.getBoundingClientRect();
+            drawingCanvas.width = rect.width;
+            drawingCanvas.height = rect.width * (3/4);
+        }
+        function getPos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            if (evt.touches) {
+                return { x: evt.touches[0].clientX - rect.left, y: evt.touches[0].clientY - rect.top };
+            }
+            return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+        }
+        function startDrawing(e) { drawing = true; draw(e); }
+        function stopDrawing() { drawing = false; ctx.beginPath(); }
+        function draw(e) {
+            if (!drawing) return;
+            e.preventDefault();
+            const pos = getPos(drawingCanvas, e);
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = document.documentElement.classList.contains('dark') ? 'white' : 'black';
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+        }
+        drawingCanvas.addEventListener('mousedown', startDrawing);
+        drawingCanvas.addEventListener('mouseup', stopDrawing);
+        drawingCanvas.addEventListener('mousemove', draw);
+        drawingCanvas.addEventListener('touchstart', startDrawing);
+        drawingCanvas.addEventListener('touchend', stopDrawing);
+        drawingCanvas.addEventListener('touchmove', draw);
+        openDrawingBtn.addEventListener('click', () => {
+            drawingModal.classList.remove('hidden');
+            resizeCanvas();
+            ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            if (tempDrawingData) {
+                const img = new Image();
+                img.onload = () => ctx.drawImage(img, 0, 0, drawingCanvas.width, drawingCanvas.height);
+                img.src = tempDrawingData;
+            }
+        });
+        closeDrawingBtn.addEventListener('click', () => drawingModal.classList.add('hidden'));
+        clearDrawingBtn.addEventListener('click', () => ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height));
+        saveDrawingBtn.addEventListener('click', () => {
+            tempDrawingData = drawingCanvas.toDataURL('image/png');
+            drawingThumbnail.src = tempDrawingData;
+            drawingThumbnail.classList.remove('hidden');
+            drawingModal.classList.add('hidden');
+        });
+
+        // --- INICIALIZACIÓN DE FIREBASE Y LA APP ---
+        onAuthStateChanged(auth, (user) => {
+            loader.style.display = 'none';
+            if (user && !pendingGoogleUser) {
+                userId = user.uid;
+                userEmailSpan.textContent = user.email;
+                if (userId === ADMIN_UID) {
+                    adminPanelBtn.classList.remove('hidden');
+                    setupAdminListeners();
+                } else {
+                    adminPanelBtn.classList.add('hidden');
+                }
+                authScreen.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                setupRealtimeListeners();
+                populateSelectors();
+                showScreen('main');
+                updateThemeIcons();
+            } else if (!user) {
+                userId = null;
+                if (unsubscribeRolls) unsubscribeRolls();
+                if (unsubscribeCameras) unsubscribeCameras();
+                if (unsubscribeInvites) unsubscribeInvites();
+                appContainer.classList.add('hidden');
+                authScreen.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
