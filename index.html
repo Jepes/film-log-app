@@ -263,7 +263,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signOut, getAdditionalUserInfo, deleteUser, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signOut, getAdditionalUserInfo, deleteUser, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, getDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -940,7 +940,8 @@
         const handleGoogleSignIn = async () => {
             const provider = new GoogleAuthProvider();
             try {
-                await signInWithRedirect(auth, provider);
+                await setPersistence(auth, browserLocalPersistence);
+                signInWithRedirect(auth, provider);
             } catch (error) {
                 DOMElements.authError.textContent = 'Error al iniciar sesión con Google.';
                 console.error(error);
@@ -983,18 +984,14 @@
         const handleCancelGoogleInvite = async () => {
             if (pendingGoogleUser) {
                 try {
-                    // We need to sign out first to be able to delete
-                    const userToDelete = pendingGoogleUser;
                     await signOut(auth);
-                    // Re-authenticate silently is not an option, so we just log out.
-                    // The user will remain in Firebase Auth, but won't be in our app flow.
-                    // A proper cleanup would require backend logic. For now, just signing out is the safest.
                 } catch (error) {
                     console.error("Error during Google invite cancellation:", error);
                 }
                 pendingGoogleUser = null;
             }
             DOMElements.googleInviteModal.classList.add('hidden');
+            tearDownApp();
         };
 
         const handleRegistration = async (e) => {
@@ -1258,8 +1255,10 @@
         // --- Auth and App Initialization Logic ---
 
         function initializeAppForUser(user) {
+            if (!user || (userId === user.uid)) return; // Evita reinicializaciones innecesarias
             userId = user.uid;
             
+            DOMElements.loader.style.display = 'none';
             if (userId === ADMIN_UID) {
                 DOMElements.adminPanelBtn.classList.remove('hidden');
                 setupAdminListeners();
@@ -1284,36 +1283,48 @@
             if (unsubscribeInventory) unsubscribeInventory();
             DOMElements.appContainer.classList.add('hidden');
             DOMElements.authScreen.classList.remove('hidden');
+            DOMElements.loader.style.display = 'none';
         }
-
-        getRedirectResult(auth)
-            .then((result) => {
+        
+        async function handleAuthentication() {
+            try {
+                const result = await getRedirectResult(auth);
+                
                 if (result) {
+                    // El usuario acaba de iniciar sesión a través de la redirección
                     const info = getAdditionalUserInfo(result);
                     if (info.isNewUser) {
                         pendingGoogleUser = result.user;
                         DOMElements.googleInviteModal.classList.remove('hidden');
                         DOMElements.loader.style.display = 'none';
                         DOMElements.authScreen.classList.remove('hidden');
+                    } else {
+                        // Es un usuario existente, inicializa la app
+                        initializeAppForUser(result.user);
                     }
+                } else {
+                    // No hay resultado de redirección, comprueba el estado de la sesión actual
+                    onAuthStateChanged(auth, (user) => {
+                        if (user && !pendingGoogleUser) {
+                            initializeAppForUser(user);
+                        } else if (!user && !pendingGoogleUser) {
+                            tearDownApp();
+                        } else {
+                            // Si hay un usuario pero está pendiente de invitación, simplemente esconde el loader
+                            DOMElements.loader.style.display = 'none';
+                            DOMElements.authScreen.classList.remove('hidden');
+                        }
+                    });
                 }
-            }).catch((error) => {
-                console.error("Error getting redirect result:", error);
-                DOMElements.authError.textContent = 'Error al iniciar sesión con Google.';
-                DOMElements.loader.style.display = 'none';
-                DOMElements.authScreen.classList.remove('hidden');
-            });
-
-        onAuthStateChanged(auth, (user) => {
-            DOMElements.loader.style.display = 'none';
-            if (user && !pendingGoogleUser) {
-                initializeAppForUser(user);
-            } else if (!user) {
-                if (!pendingGoogleUser) {
-                    tearDownApp();
-                }
+            } catch (error) {
+                console.error("Error de autenticación en el arranque:", error);
+                DOMElements.authError.textContent = 'Error al verificar la sesión.';
+                tearDownApp();
             }
-        });
+        }
+        
+        // Arranca el proceso de autenticación al cargar la página
+        handleAuthentication();
 
 
         // --- Event Listeners ---
@@ -1334,8 +1345,13 @@
         DOMElements.googleSigninBtn.addEventListener('click', handleGoogleSignIn);
         DOMElements.googleInviteForm.addEventListener('submit', handleGoogleInviteVerification);
         DOMElements.cancelGoogleInviteBtn.addEventListener('click', handleCancelGoogleInvite);
-        DOMElements.logoutBtn.addEventListener('click', () => signOut(auth));
-
+        DOMElements.logoutBtn.addEventListener('click', () => {
+             signOut(auth).then(() => {
+                tearDownApp();
+                console.log('Sesión cerrada');
+             });
+        });
+        
         DOMElements.addRollBtn.addEventListener('click', () => {
             DOMElements.newRollForm.reset();
             DOMElements.editingRollIdInput.value = '';
