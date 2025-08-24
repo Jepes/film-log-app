@@ -62,7 +62,7 @@
             <p id="auth-error" class="text-red-500 text-sm mt-4 text-center"></p>
             <div class="relative flex py-5 items-center"><div class="flex-grow border-t border-gray-300 dark:border-gray-600"></div><span class="flex-shrink mx-4 text-gray-500 dark:text-gray-400">O</span><div class="flex-grow border-t border-gray-300 dark:border-gray-600"></div></div>
             <button id="google-signin-btn" class="w-full text-gray-700 dark:text-white bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-500 focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-500 font-medium rounded-lg text-sm px-5 py-2.5 text-center flex items-center justify-center"><svg class="w-4 h-4 mr-2" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 126 21.5 173.5 64.2L337.7 139.6C312.4 116.5 282.7 103 248 103c-73.2 0-133.1 60.2-133.1 134.3s59.9 134.3 133.1 134.3c76.1 0 124.2-54.4 128.6-109.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path></svg>Continuar con Google</button>
-            <p class="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">v1.2,</p>
+            <p class="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">v1.2</p>
         </div>
     </div>
 
@@ -264,7 +264,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signOut, getAdditionalUserInfo, deleteUser, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signOut, getAdditionalUserInfo, signInWithPopup, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, getDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -941,10 +941,19 @@
         const handleGoogleSignIn = async () => {
             const provider = new GoogleAuthProvider();
             try {
-                signInWithRedirect(auth, provider);
+                await setPersistence(auth, browserLocalPersistence);
+                const result = await signInWithPopup(auth, provider);
+                const info = getAdditionalUserInfo(result);
+                if (info.isNewUser) {
+                    pendingGoogleUser = result.user;
+                    DOMElements.googleInviteModal.classList.remove('hidden');
+                }
+                // For existing users, onAuthStateChanged will handle initialization
             } catch (error) {
-                DOMElements.authError.textContent = 'Error al iniciar sesión con Google.';
-                console.error(error);
+                console.error("Error with Google Popup Sign-In:", error);
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    DOMElements.authError.textContent = 'Error al iniciar sesión con Google.';
+                }
             }
         };
 
@@ -967,13 +976,10 @@
                         usedAt: serverTimestamp()
                     });
                     
-                    DOMElements.googleInviteModal.classList.add('hidden');
-                    const freshlyAuthenticatedUser = auth.currentUser;
+                    const userToFinalize = pendingGoogleUser;
                     pendingGoogleUser = null; 
-
-                    if (freshlyAuthenticatedUser) {
-                        initializeAppForUser(freshlyAuthenticatedUser);
-                    }
+                    DOMElements.googleInviteModal.classList.add('hidden');
+                    initializeAppForUser(userToFinalize);
                 }
             } catch (error) {
                  errorEl.textContent = 'Error al verificar el código. Inténtelo de nuevo.';
@@ -983,15 +989,10 @@
 
         const handleCancelGoogleInvite = async () => {
             if (pendingGoogleUser) {
-                try {
-                    await signOut(auth);
-                } catch (error) {
-                    console.error("Error during Google invite cancellation:", error);
-                }
+                await signOut(auth);
                 pendingGoogleUser = null;
             }
             DOMElements.googleInviteModal.classList.add('hidden');
-            tearDownApp();
         };
 
         const handleRegistration = async (e) => {
@@ -1015,6 +1016,7 @@
                     return;
                 }
 
+                await setPersistence(auth, browserLocalPersistence);
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 
                 await updateDoc(inviteRef, {
@@ -1288,45 +1290,14 @@
             DOMElements.loader.style.display = 'none';
         }
         
-        async function handleAuthentication() {
-            try {
-                const result = await getRedirectResult(auth);
-                
-                if (result) {
-                    // El usuario acaba de iniciar sesión a través de la redirección
-                    const info = getAdditionalUserInfo(result);
-                    if (info.isNewUser) {
-                        pendingGoogleUser = result.user;
-                        DOMElements.googleInviteModal.classList.remove('hidden');
-                        DOMElements.loader.style.display = 'none';
-                        DOMElements.authScreen.classList.remove('hidden');
-                    } else {
-                        // Es un usuario existente, inicializa la app
-                        initializeAppForUser(result.user);
-                    }
-                } else {
-                    // No hay resultado de redirección, comprueba el estado de la sesión actual
-                    onAuthStateChanged(auth, (user) => {
-                        if (user && !pendingGoogleUser) {
-                            initializeAppForUser(user);
-                        } else if (!user && !pendingGoogleUser) {
-                            tearDownApp();
-                        } else {
-                            // Si hay un usuario pero está pendiente de invitación, simplemente esconde el loader
-                            DOMElements.loader.style.display = 'none';
-                            DOMElements.authScreen.classList.remove('hidden');
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error("Error de autenticación en el arranque:", error);
-                DOMElements.authError.textContent = 'Error al verificar la sesión.';
+        onAuthStateChanged(auth, (user) => {
+            DOMElements.loader.style.display = 'none';
+            if (user && !pendingGoogleUser) {
+                initializeAppForUser(user);
+            } else if (!user && !pendingGoogleUser) {
                 tearDownApp();
             }
-        }
-        
-        // Arranca el proceso de autenticación al cargar la página
-        handleAuthentication();
+        });
 
 
         // --- Event Listeners ---
@@ -1348,10 +1319,7 @@
         DOMElements.googleInviteForm.addEventListener('submit', handleGoogleInviteVerification);
         DOMElements.cancelGoogleInviteBtn.addEventListener('click', handleCancelGoogleInvite);
         DOMElements.logoutBtn.addEventListener('click', () => {
-             signOut(auth).then(() => {
-                tearDownApp();
-                console.log('Sesión cerrada');
-             });
+             signOut(auth);
         });
         
         DOMElements.addRollBtn.addEventListener('click', () => {
